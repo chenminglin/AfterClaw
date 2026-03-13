@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">AndClaw Host</string>
+    <string name="host_notification_title">AndClaw host is active</string>
+    <string name="host_notification_text">Runtime and local bridge stay alive for OpenClaw.</string>
+</resources>
