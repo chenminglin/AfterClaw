@@ -16,10 +16,6 @@ import java.io.FileInputStream
 import java.io.IOException
 import java.io.InputStreamReader
 import java.net.HttpURLConnection
-import java.net.InetAddress
-import java.net.InetSocketAddress
-import java.net.ServerSocket
-import java.net.Socket
 import java.net.SocketTimeoutException
 import java.net.URL
 import java.nio.charset.StandardCharsets
@@ -42,7 +38,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -52,55 +47,10 @@ import org.json.JSONObject
 import org.json.JSONTokener
 import org.tukaani.xz.XZInputStream
 
-private const val LOG_TAG = "AndClawHost"
-private const val RUNTIME_ASSET_NAME = "proot-runtime-arm64-v8a.zip"
-private const val RUNTIME_VERSION = "proot-mvp"
-private const val HOST_RUNTIME_LAYOUT_VERSION = "2"
-private const val UBUNTU_RUNTIME_VERSION = "ubuntu-questing-aarch64-pd-v4.37.0"
-private const val UBUNTU_RUNTIME_LAYOUT_VERSION = "3"
-private const val UBUNTU_ROOTFS_URL =
-    "https://easycli.sh/proot-distro/ubuntu-questing-aarch64-pd-v4.37.0.tar.xz"
-private const val UBUNTU_ARCHIVE_MIN_BYTES = 40L * 1024 * 1024
-private const val UBUNTU_DOWNLOAD_CONNECT_TIMEOUT_MS = 30_000
-private const val UBUNTU_DOWNLOAD_READ_TIMEOUT_MS = 120_000
-private const val UBUNTU_DOWNLOAD_MAX_ATTEMPTS = 3
-private const val NODE_RUNTIME_VERSION = "node-v22.22.1-linux-arm64"
-private const val NODE_RUNTIME_LAYOUT_VERSION = "2"
-private const val NODE_RUNTIME_URL =
-    "https://nodejs.org/dist/v22.22.1/node-v22.22.1-linux-arm64.tar.xz"
-private const val NODE_RUNTIME_SHA256 =
-    "0f3550d58d45e5d3cf7103d9e3f69937f09fe82fb5dd474c66a5d816fa58c9ee"
-private const val NODE_ARCHIVE_MIN_BYTES = 20L * 1024 * 1024
-private const val NODE_DOWNLOAD_CONNECT_TIMEOUT_MS = 30_000
-private const val NODE_DOWNLOAD_READ_TIMEOUT_MS = 120_000
-private const val NODE_DOWNLOAD_MAX_ATTEMPTS = 3
-private const val PROOT_FAKE_KERNEL_RELEASE = "6.17.0-AndClaw"
-private const val PREFS_NAME = "andclaw_host_prefs"
-private const val PREF_GATEWAY_TOKEN = "gateway_token"
-private const val DEVICE_BRIDGE_PORT = 18791
-private const val GATEWAY_PORT = 18789
-private const val MAX_LOG_LINES = 240
-private const val GATEWAY_RPC_OUTPUT_BEGIN = "__ANDCLAW_GATEWAY_RPC_BEGIN__"
-private const val GATEWAY_RPC_OUTPUT_END = "__ANDCLAW_GATEWAY_RPC_END__"
-
-data class HostUiState(
-    val serviceRunning: Boolean = false,
-    val busyTask: String? = null,
-    val failedStep: String? = null,
-    val busyProgress: Float? = null,
-    val busyProgressLabel: String? = null,
-    val runtimeInstalled: Boolean = false,
-    val openClawInstalled: Boolean = false,
-    val gatewayRunning: Boolean = false,
-    val bridgeRunning: Boolean = false,
-    val bridgePort: Int = DEVICE_BRIDGE_PORT,
-    val gatewayPort: Int = GATEWAY_PORT,
-    val runtimeSummary: String = "Bundled runtime has not been prepared yet.",
-    val gatewayToken: String = "",
-    val logs: List<String> = emptyList(),
-    val lastError: String? = null,
-)
-
+/**
+ * AndClaw 宿主控制器，负责管理和协调 Proot 运行时环境、节点环境、Gateway 和桥接服务器。
+ * 承担所有的环境安装、启动和停止任务。
+ */
 class AndClawHostController(
     private val appContext: Context,
 ) {
@@ -2412,86 +2362,3 @@ class AndClawHostController(
     }
 }
 
-private fun File.isSymbolicLinkCompat(): Boolean {
-    return try {
-        val canonical = canonicalFile
-        val absoluteParent = absoluteFile.parentFile ?: return false
-        canonical != File(absoluteParent, name).canonicalFile
-    } catch (_: IOException) {
-        false
-    }
-}
-
-private fun shellQuote(value: String): String {
-    return "'" + value.replace("'", "'\"'\"'") + "'"
-}
-
-private class DeviceBridgeServer(
-    private val port: Int,
-    private val responseProvider: (String) -> Response,
-    private val onLog: (String) -> Unit,
-) {
-    private var serverSocket: ServerSocket? = null
-    private var acceptJob: Job? = null
-
-    fun start(scope: CoroutineScope) {
-        if (serverSocket != null) {
-            return
-        }
-        val socket = ServerSocket()
-        socket.reuseAddress = true
-        socket.bind(InetSocketAddress(InetAddress.getByName("127.0.0.1"), port))
-        serverSocket = socket
-        acceptJob = scope.launch(Dispatchers.IO) {
-            onLog("Local device bridge is listening on 127.0.0.1:$port.")
-            while (isActive) {
-                try {
-                    val client = socket.accept()
-                    launch {
-                        handleClient(client)
-                    }
-                } catch (err: IOException) {
-                    if (isActive) {
-                        onLog("Device bridge stopped accepting connections: ${err.message}")
-                    }
-                    break
-                }
-            }
-        }
-    }
-
-    suspend fun stop() {
-        acceptJob?.cancel()
-        serverSocket?.close()
-        serverSocket = null
-        acceptJob = null
-    }
-
-    private fun handleClient(client: Socket) {
-        client.use { socket ->
-            val reader = BufferedReader(InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8))
-            val requestLine = reader.readLine() ?: return
-            while (reader.readLine()?.isNotEmpty() == true) {
-                // Ignore headers for now.
-            }
-            val path = requestLine.split(" ").getOrNull(1) ?: "/"
-            val response = responseProvider(path)
-            val bodyBytes = response.body.toByteArray(StandardCharsets.UTF_8)
-            val writer = socket.getOutputStream()
-            val statusText = if (response.statusCode == 200) "OK" else "Not Found"
-            writer.write("HTTP/1.1 ${response.statusCode} $statusText\r\n".toByteArray(StandardCharsets.UTF_8))
-            writer.write("Content-Type: ${response.contentType}\r\n".toByteArray(StandardCharsets.UTF_8))
-            writer.write("Content-Length: ${bodyBytes.size}\r\n".toByteArray(StandardCharsets.UTF_8))
-            writer.write("Connection: close\r\n".toByteArray(StandardCharsets.UTF_8))
-            writer.write("\r\n".toByteArray(StandardCharsets.UTF_8))
-            writer.write(bodyBytes)
-            writer.flush()
-        }
-    }
-
-    data class Response(
-        val statusCode: Int,
-        val contentType: String = "application/json; charset=utf-8",
-        val body: String,
-    )
-}

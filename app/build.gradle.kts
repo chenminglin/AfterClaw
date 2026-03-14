@@ -13,7 +13,7 @@ android {
 
     defaultConfig {
         applicationId = "com.bethena.andclawapp"
-        minSdk = 24
+        minSdk = 26
         // Termux-style runtimes need legacy exec semantics for binaries stored in app-private dirs.
         targetSdk = 28
         versionCode = 1
