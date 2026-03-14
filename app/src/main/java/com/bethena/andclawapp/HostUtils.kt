@@ -18,36 +18,37 @@ fun buildGatewayAccessLink(
 /**
  * 构建初始化步骤列表
  * @param state 当前宿主 UI 状态
+ * @param s 多语言字符串对象
  * @return 包含所有步骤的列表
  */
-fun buildInitSteps(state: HostUiState): List<InitStepUiModel> {
+fun buildInitSteps(state: HostUiState, s: AppStrings): List<InitStepUiModel> {
     val activeIndex = resolveActiveInitStepIndex(state)
     val failedIndex = resolveFailedInitStepIndex(state)
-    val progressDetail = buildInitStepProgressDetail(state)
+    val progressDetail = buildInitStepProgressDetail(state, s)
 
     return listOf(
         InitStepUiModel(
             number = 1,
-            title = "检查设备环境",
-            detail = "启动本地服务并检查当前设备是否可运行。${progressDetail(0)}",
+            title = s.step1Title,
+            detail = "${s.step1Desc}${progressDetail(0)}",
             status = resolveStepStatus(index = 0, activeIndex = activeIndex, failedIndex = failedIndex),
         ),
         InitStepUiModel(
             number = 2,
-            title = "准备运行环境",
-            detail = "初始化宿主运行时、Ubuntu 与 Node 环境。${progressDetail(1)}",
+            title = s.step2Title,
+            detail = "${s.step2Desc}${progressDetail(1)}",
             status = resolveStepStatus(index = 1, activeIndex = activeIndex, failedIndex = failedIndex),
         ),
         InitStepUiModel(
             number = 3,
-            title = "安装 OpenClaw",
-            detail = "检查并完成 OpenClaw 安装，必要时自动修复。${progressDetail(2)}",
+            title = s.step3Title,
+            detail = "${s.step3Desc}${progressDetail(2)}",
             status = resolveStepStatus(index = 2, activeIndex = activeIndex, failedIndex = failedIndex),
         ),
         InitStepUiModel(
             number = 4,
-            title = "启动本地网关",
-            detail = "启动本地 Gateway，生成访问地址与令牌。${progressDetail(3)}",
+            title = s.step4Title,
+            detail = "${s.step4Desc}${progressDetail(3)}",
             status = resolveStepStatus(index = 3, activeIndex = activeIndex, failedIndex = failedIndex),
         ),
     )
@@ -56,18 +57,18 @@ fun buildInitSteps(state: HostUiState): List<InitStepUiModel> {
 /**
  * 构建初始化步骤的进度详情
  */
-private fun buildInitStepProgressDetail(state: HostUiState): (Int) -> String {
+private fun buildInitStepProgressDetail(state: HostUiState, s: AppStrings): (Int) -> String {
     val activeIndex = resolveActiveInitStepIndex(state)
     val label = state.busyProgressLabel?.takeIf { it.isNotBlank() }
     val task = state.busyTask?.takeIf { it.isNotBlank() }
     val detail =
         buildString {
             if (!task.isNullOrBlank()) {
-                append("\n当前阶段：")
+                append("\n${s.currentPhase}")
                 append(task)
             }
             if (!label.isNullOrBlank()) {
-                append("\n当前进度：")
+                append("\n${s.currentProgress}")
                 append(label)
             }
         }

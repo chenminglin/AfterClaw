@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -38,6 +39,7 @@ fun HostConsoleScreen(
     state: HostUiState,  // 宿主 UI 状态
     onBack: () -> Unit,   // 返回回调
 ) {
+    val s = LocalAppStrings.current
     BackHandler(onBack = onBack)
 
     var showAllLogs by rememberSaveable { mutableStateOf(true) }
@@ -48,7 +50,7 @@ fun HostConsoleScreen(
         )
     }
     val listState = rememberLazyListState()
-    val steps = remember(state) { buildInitSteps(state) }
+    val steps = remember(state, s) { buildInitSteps(state, s) }
 
     LaunchedEffect(visibleLogs.size) {
         if (visibleLogs.isNotEmpty()) {
@@ -61,7 +63,7 @@ fun HostConsoleScreen(
             TopAppBar(
                 title = {
                     Text(
-                        text = "初始化详情",
+                        text = s.initDetail,
                         color = Color(0xFFF8FAFC),
                         fontWeight = FontWeight.SemiBold,
                     )
@@ -69,7 +71,7 @@ fun HostConsoleScreen(
                 navigationIcon = {
                     TextButton(onClick = onBack) {
                         Text(
-                            text = "返回",
+                            text = s.back,
                             color = Color(0xFFD6EEFF),
                             fontWeight = FontWeight.SemiBold,
                         )
@@ -78,7 +80,7 @@ fun HostConsoleScreen(
                 actions = {
                     TextButton(onClick = { showAllLogs = !showAllLogs }) {
                         Text(
-                            text = if (showAllLogs) "只看 OpenClaw" else "全部日志",
+                            text = if (showAllLogs) s.onlyOpenClaw else s.allLogs,
                             color = Color(0xFFD6EEFF),
                             fontWeight = FontWeight.SemiBold,
                         )
@@ -96,12 +98,13 @@ fun HostConsoleScreen(
                 .fillMaxSize()
                 .background(hostBackgroundBrush())
                 .padding(innerPadding)
+                .navigationBarsPadding()
                 .padding(horizontal = 20.dp, vertical = 20.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             item {
                 StatusCard(
-                    title = "初始化详情",
+                    title = s.initDetail,
                     detail = (state.busyTask ?: state.runtimeSummary)!!,
                     accent = when {
                         state.lastError != null -> Color(0xFFF97316)
@@ -124,9 +127,9 @@ fun HostConsoleScreen(
             if (state.lastError != null) {
                 item {
                     DetailCard(
-                        title = "最近错误",
+                        title = s.recentError,
                         accent = Color(0xFFF97316),
-                        lines = listOfNotNull(state.failedStep?.let { "失败步骤: $it" }, state.lastError),
+                        lines = listOfNotNull(state.failedStep?.let { s.failedStepAt(it) }, state.lastError),
                         monospace = true,
                     )
                 }
@@ -134,14 +137,14 @@ fun HostConsoleScreen(
 
             item {
                 LogConsoleCard(
-                    title = if (showAllLogs) "全部日志" else "OpenClaw 日志",
+                    title = if (showAllLogs) s.allLogs else s.openClawLogs,
                     accent = Color(0xFF38BDF8),
                     lines = visibleLogs,
                     emptyMessage =
                         if (showAllLogs) {
-                            "还没有可显示的宿主日志。"
+                            s.noHostLogs
                         } else {
-                            "还没有捕获到 OpenClaw Gateway 的输出。"
+                            s.noGatewayLogs
                         },
                     listState = listState,
                     modifier = Modifier

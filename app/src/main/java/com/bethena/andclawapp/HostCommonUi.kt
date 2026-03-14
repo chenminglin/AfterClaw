@@ -114,12 +114,13 @@ fun StatusCard(
  */
 @Composable
 fun InitStepCard(step: InitStepUiModel) {
+    val s = LocalAppStrings.current
     val (accent, badgeText, badgeColor) =
         when (step.status) {
-            InitStepStatus.Pending -> Triple(Color(0xFF64748B), "未开始", Color(0xFF94A3B8))
-            InitStepStatus.InProgress -> Triple(Color(0xFF38BDF8), "进行中", Color(0xFF7DD3FC))
-            InitStepStatus.Completed -> Triple(Color(0xFF34D399), "已完成", Color(0xFF6EE7B7))
-            InitStepStatus.Failed -> Triple(Color(0xFFF97316), "失败", Color(0xFFFDA4AF))
+            InitStepStatus.Pending -> Triple(Color(0xFF64748B), s.pending, Color(0xFF94A3B8))
+            InitStepStatus.InProgress -> Triple(Color(0xFF38BDF8), s.inProgress, Color(0xFF7DD3FC))
+            InitStepStatus.Completed -> Triple(Color(0xFF34D399), s.completed, Color(0xFF6EE7B7))
+            InitStepStatus.Failed -> Triple(Color(0xFFF97316), s.failed, Color(0xFFFDA4AF))
         }
 
     Card(
@@ -297,6 +298,7 @@ fun AccessCard(
     gatewayToken: String,
     accessLink: String,
 ) {
+    val s = LocalAppStrings.current
     val clipboardManager = LocalClipboardManager.current
     val context = LocalContext.current
 
@@ -328,7 +330,7 @@ fun AccessCard(
             SelectionContainer {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(
-                        text = "Gateway",
+                        text = s.gateway,
                         color = Color(0xFFE2E8F0),
                         style = MaterialTheme.typography.bodyMedium,
                         fontFamily = FontFamily.Monospace,
@@ -340,7 +342,7 @@ fun AccessCard(
                         fontFamily = FontFamily.Monospace,
                     )
                     Text(
-                        text = "Token",
+                        text = s.token,
                         color = Color(0xFFE2E8F0),
                         style = MaterialTheme.typography.bodyMedium,
                         fontFamily = FontFamily.Monospace,
@@ -352,7 +354,7 @@ fun AccessCard(
                         fontFamily = FontFamily.Monospace,
                     )
                     Text(
-                        text = "Link",
+                        text = s.link,
                         color = Color(0xFFE2E8F0),
                         style = MaterialTheme.typography.bodyMedium,
                         fontFamily = FontFamily.Monospace,
@@ -369,11 +371,11 @@ fun AccessCard(
             FilledTonalButton(
                 onClick = {
                     clipboardManager.setText(AnnotatedString(accessLink))
-                    Toast.makeText(context, "访问链接已复制", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, s.linkCopied, Toast.LENGTH_SHORT).show()
                 },
             ) {
                 Text(
-                    text = "复制链接",
+                    text = s.copyLink,
                     fontWeight = FontWeight.SemiBold,
                 )
             }

@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -57,6 +58,7 @@ fun OpenClawConfigScreen(
     hostState: HostUiState, // 宿主 UI 状态
     onBack: () -> Unit,      // 返回回调
 ) {
+    val s = LocalAppStrings.current
     val context = LocalContext.current
     val configState = rememberOpenClawConfigScreenState(context.openClawConfigRepository())
     var showDiscardDialog by rememberSaveable { mutableStateOf(false) }
@@ -92,16 +94,16 @@ fun OpenClawConfigScreen(
                         onBack()
                     },
                 ) {
-                    Text("放弃修改")
+                    Text(s.discardChanges)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showDiscardDialog = false }) {
-                    Text("继续编辑")
+                    Text(s.continueEditing)
                 }
             },
-            title = { Text("未保存的修改") },
-            text = { Text("当前页面还有未保存的配置修改，返回后这些修改会丢失。") },
+            title = { Text(s.unsavedChangesTitle) },
+            text = { Text(s.unsavedChangesDesc) },
         )
     }
 
@@ -110,7 +112,7 @@ fun OpenClawConfigScreen(
             TopAppBar(
                 title = {
                     Text(
-                        text = "OpenClaw 配置",
+                        text = s.openClawConfig,
                         color = Color(0xFFF8FAFC),
                         fontWeight = FontWeight.SemiBold,
                     )
@@ -118,7 +120,7 @@ fun OpenClawConfigScreen(
                 navigationIcon = {
                     TextButton(onClick = ::handleBack) {
                         Text(
-                            text = "返回",
+                            text = s.back,
                             color = Color(0xFFD6EEFF),
                             fontWeight = FontWeight.SemiBold,
                         )
@@ -131,7 +133,7 @@ fun OpenClawConfigScreen(
                             enabled = !configState.isLoading && !configState.isSaving,
                         ) {
                             Text(
-                                text = "重新加载",
+                                text = s.reload,
                                 color = Color(0xFFD6EEFF),
                                 fontWeight = FontWeight.SemiBold,
                             )
@@ -151,6 +153,7 @@ fun OpenClawConfigScreen(
                 isSaving = configState.isSaving,
                 onDiscard = { configState.discardChanges() },
                 onSave = { configState.save() },
+                s = s
             )
         },
     ) { innerPadding ->
@@ -164,9 +167,8 @@ fun OpenClawConfigScreen(
         ) {
             item {
                 StatusCard(
-                    title = "本机核心配置",
-                    detail =
-                        "这里只编辑 OpenClaw 的启动必需项。保存后将在下次启动 OpenClaw 时生效，不会立即重启当前 Gateway。",
+                    title = s.coreConfigTitle,
+                    detail = s.coreConfigDesc,
                     accent = Color(0xFF38BDF8),
                 )
             }
@@ -174,9 +176,9 @@ fun OpenClawConfigScreen(
             if (!hostState.gatewayRunning) {
                 item {
                     DetailCard(
-                        title = "Gateway 未运行",
+                        title = s.gatewayNotRunning,
                         accent = Color(0xFFF97316),
-                        lines = listOf("只有本地 Gateway 已启动时，才能读取和保存 OpenClaw 配置。"),
+                        lines = listOf(s.gatewayNotRunningDesc),
                     )
                 }
             }
@@ -184,7 +186,7 @@ fun OpenClawConfigScreen(
             configState.saveMessage?.let { message ->
                 item {
                     DetailCard(
-                        title = "已保存",
+                        title = s.saved,
                         accent = Color(0xFF34D399),
                         lines = listOf(message),
                     )
@@ -194,7 +196,7 @@ fun OpenClawConfigScreen(
             configState.loadError?.let { error ->
                 item {
                     DetailCard(
-                        title = "错误",
+                        title = s.error,
                         accent = Color(0xFFF97316),
                         lines = listOf(error),
                         monospace = true,
@@ -206,8 +208,8 @@ fun OpenClawConfigScreen(
                 configState.isLoading && !configState.hasLoadedData -> {
                     item {
                         StatusCard(
-                            title = "正在读取配置",
-                            detail = "正在通过本地 Gateway RPC 获取当前配置与 schema 提示。",
+                            title = s.readingConfig,
+                            detail = s.readingConfigDesc,
                             accent = Color(0xFF38BDF8),
                         )
                     }
@@ -216,9 +218,9 @@ fun OpenClawConfigScreen(
                 !configState.hasLoadedData -> {
                     item {
                         ActionRow(
-                            primaryLabel = "重新加载配置",
+                            primaryLabel = s.reloadConfig,
                             onPrimary = { configState.load(force = true) },
-                            secondaryLabel = if (hostState.gatewayRunning) null else "返回",
+                            secondaryLabel = if (hostState.gatewayRunning) null else s.back,
                             onSecondary = if (hostState.gatewayRunning) null else onBack,
                         )
                     }
@@ -227,13 +229,13 @@ fun OpenClawConfigScreen(
                 else -> {
                     item {
                         DetailCard(
-                            title = "当前配置文件",
+                            title = s.configFile,
                             accent = Color(0xFFF59E0B),
                             lines =
                                 listOfNotNull(
-                                    configState.configPath?.let { "路径: $it" },
-                                    "读取方式: openclaw gateway call config.get",
-                                    "保存方式: openclaw gateway call config.set",
+                                    configState.configPath?.let { "${s.path}: $it" },
+                                    "${s.readMethod}: openclaw gateway call config.get",
+                                    "${s.writeMethod}: openclaw gateway call config.set",
                                 ),
                             monospace = true,
                         )
@@ -241,9 +243,9 @@ fun OpenClawConfigScreen(
 
                     item {
                         ConfigSectionCard(
-                            title = "运行目录",
+                            title = s.runDir,
                             accent = Color(0xFF38BDF8),
-                            detail = "配置默认工作目录和仓库根目录。",
+                            detail = s.runDirDesc,
                         ) {
                             ConfigTextField(
                                 label = configState.hints.workspace.label ?: "workspace",
@@ -252,7 +254,7 @@ fun OpenClawConfigScreen(
                                 enabled = hostState.gatewayRunning && !configState.isSaving,
                                 help =
                                     configState.hints.workspace.help
-                                        ?: "默认工作目录。留空时由 OpenClaw 自行决定。",
+                                        ?: s.workspaceHelp,
                             )
                             Spacer(modifier = Modifier.height(12.dp))
                             ConfigTextField(
@@ -262,16 +264,16 @@ fun OpenClawConfigScreen(
                                 enabled = hostState.gatewayRunning && !configState.isSaving,
                                 help =
                                     configState.hints.repoRoot.help
-                                        ?: "默认仓库根目录。留空时不强制指定。",
+                                        ?: s.repoRootHelp,
                             )
                         }
                     }
 
                     item {
                         ConfigSectionCard(
-                            title = "默认模型",
+                            title = s.defaultModel,
                             accent = Color(0xFF8B5CF6),
-                            detail = "配置默认 primary model 和 fallback models。",
+                            detail = s.defaultModelDesc,
                         ) {
                             ConfigTextField(
                                 label = configState.hints.primaryModel.label ?: "primary model",
@@ -280,7 +282,7 @@ fun OpenClawConfigScreen(
                                 enabled = hostState.gatewayRunning && !configState.isSaving,
                                 help =
                                     configState.hints.primaryModel.help
-                                        ?: "例如：openai/gpt-5-mini。",
+                                        ?: s.primaryModelHelp,
                             )
                             Spacer(modifier = Modifier.height(12.dp))
                             ConfigTextField(
@@ -290,7 +292,7 @@ fun OpenClawConfigScreen(
                                 enabled = hostState.gatewayRunning && !configState.isSaving,
                                 help =
                                     configState.hints.fallbackModels.help
-                                        ?: "一行一个模型 ID，按顺序作为降级候选。",
+                                        ?: s.fallbackModelsHelp,
                                 singleLine = false,
                                 minLines = 4,
                             )
@@ -303,11 +305,11 @@ fun OpenClawConfigScreen(
                             accent = Color(0xFFF59E0B),
                             detail =
                                 configState.hints.providers.help
-                                    ?: "这里只编辑 providerId、api、baseUrl 和 apiKey。",
+                                    ?: s.providerDesc,
                         ) {
                             if (configState.form.providers.isEmpty()) {
                                 Text(
-                                    text = "当前还没有 provider，保存前可以先添加一个。",
+                                    text = s.noProviderDesc,
                                     color = Color(0xFFBFDBFE),
                                     style = MaterialTheme.typography.bodyMedium,
                                 )
@@ -322,6 +324,7 @@ fun OpenClawConfigScreen(
                                     onBaseUrlChange = { configState.updateProviderBaseUrl(provider.rowId, it) },
                                     onApiKeyChange = { configState.updateProviderApiKey(provider.rowId, it) },
                                     onRemove = { configState.removeProvider(provider.rowId) },
+                                    s = s
                                 )
                                 Spacer(modifier = Modifier.height(14.dp))
                             }
@@ -331,7 +334,7 @@ fun OpenClawConfigScreen(
                                 enabled = hostState.gatewayRunning && !configState.isSaving,
                             ) {
                                 Text(
-                                    text = "新增 Provider",
+                                    text = s.addProvider,
                                     fontWeight = FontWeight.SemiBold,
                                 )
                             }
@@ -340,9 +343,9 @@ fun OpenClawConfigScreen(
 
                     item {
                         ConfigSectionCard(
-                            title = "当前配置预览",
+                            title = s.currentConfigPreview,
                             accent = Color(0xFF34D399),
-                            detail = "这是最近一次从 Gateway 读取到的已脱敏配置，未包含当前未保存的修改。",
+                            detail = s.currentConfigPreviewDesc,
                         ) {
                             SelectionContainer {
                                 Text(
@@ -370,11 +373,14 @@ fun ConfigActionBar(
     isSaving: Boolean,
     onDiscard: () -> Unit,
     onSave: () -> Unit,
+    s: AppStrings
 ) {
     Card(
         colors = CardDefaults.cardColors(containerColor = Color(0x1608111F)),
         shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .navigationBarsPadding(),
     ) {
         Column(
             modifier = Modifier
@@ -383,7 +389,7 @@ fun ConfigActionBar(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text(
-                text = "保存后将在下次启动 OpenClaw 时生效。",
+                text = s.saveNextEffect,
                 color = Color(0xFFBFDBFE),
                 style = MaterialTheme.typography.bodyMedium,
             )
@@ -396,7 +402,7 @@ fun ConfigActionBar(
                     modifier = Modifier.weight(1f),
                     enabled = !isSaving && isDirty,
                 ) {
-                    Text("放弃修改")
+                    Text(s.discardChanges)
                 }
                 FilledTonalButton(
                     onClick = onSave,
@@ -404,7 +410,7 @@ fun ConfigActionBar(
                     enabled = canSave && isDirty && !isSaving,
                 ) {
                     Text(
-                        text = if (isSaving) "保存中..." else "保存配置",
+                        text = if (isSaving) s.saving else s.saveConfig,
                         fontWeight = FontWeight.SemiBold,
                     )
                 }
@@ -499,6 +505,7 @@ fun ProviderEditorCard(
     onBaseUrlChange: (String) -> Unit,
     onApiKeyChange: (String) -> Unit,
     onRemove: () -> Unit,
+    s: AppStrings
 ) {
     Card(
         colors = CardDefaults.cardColors(containerColor = Color(0x1A0F172A)),
@@ -515,13 +522,13 @@ fun ProviderEditorCard(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text = provider.providerId.ifBlank { "新 Provider" },
+                    text = provider.providerId.ifBlank { s.newProvider },
                     color = Color(0xFFF8FAFC),
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,
                 )
                 TextButton(onClick = onRemove, enabled = enabled) {
-                    Text("删除")
+                    Text(s.delete)
                 }
             }
 
@@ -530,7 +537,7 @@ fun ProviderEditorCard(
                 value = provider.providerId,
                 onValueChange = onProviderIdChange,
                 enabled = enabled,
-                help = "例如：openai、anthropic、openrouter。",
+                help = s.providerIdHelp,
             )
 
             ConfigTextField(
@@ -538,7 +545,7 @@ fun ProviderEditorCard(
                 value = provider.api,
                 onValueChange = onApiChange,
                 enabled = enabled,
-                help = "Provider API 类型，例如 responses、chat.completions。",
+                help = s.apiHelp,
             )
 
             ConfigTextField(
@@ -546,7 +553,7 @@ fun ProviderEditorCard(
                 value = provider.baseUrl,
                 onValueChange = onBaseUrlChange,
                 enabled = enabled,
-                help = "可选。自定义网关地址时再填写。",
+                help = s.baseUrlHelp,
             )
 
             ConfigTextField(
@@ -554,7 +561,7 @@ fun ProviderEditorCard(
                 value = provider.apiKeyInput,
                 onValueChange = onApiKeyChange,
                 enabled = enabled,
-                help = providerApiKeyHelp(provider),
+                help = providerApiKeyHelp(provider, s),
                 visualTransformation = PasswordVisualTransformation(),
             )
         }
@@ -564,12 +571,12 @@ fun ProviderEditorCard(
 /**
  * 根据 Provider 的当前状态返回其 API Key 输入框的辅助文本
  */
-private fun providerApiKeyHelp(provider: ProviderConfigItem): String {
+private fun providerApiKeyHelp(provider: ProviderConfigItem, s: AppStrings): String {
     return when {
         provider.apiKeyChanged && provider.apiKeyInput.isBlank() ->
-            "保存时会清除此 Provider 的 apiKey。"
+            s.apiKeyClearHelp
         provider.hasExistingApiKey && !provider.apiKeyChanged ->
-            "当前已存在 apiKey；保持不改时会沿用现有值。"
-        else -> "可选。只有显式输入新值时才会覆盖当前 apiKey。"
+            s.apiKeyExistingHelp
+        else -> s.apiKeyDefaultHelp
     }
 }

@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -27,7 +28,8 @@ fun InitFlowScreen(
     onRetry: () -> Unit,      // 重试回调
     onOpenDetail: () -> Unit, // 查看详情回调
 ) {
-    val steps = remember(state) { buildInitSteps(state) }
+    val s = LocalAppStrings.current
+    val steps = remember(state, s) { buildInitSteps(state, s) }
     val activeStep = steps.firstOrNull { it.status == InitStepStatus.InProgress }
     val failedStep = steps.firstOrNull { it.status == InitStepStatus.Failed }
     val accent =
@@ -38,7 +40,7 @@ fun InitFlowScreen(
         }
     val summary =
         when {
-            state.gatewayRunning && state.lastError == null -> "OpenClaw 已就绪"
+            state.gatewayRunning && state.lastError == null -> s.openClawReady
             failedStep != null && state.lastError != null -> state.lastError
             activeStep != null -> activeStep.detail
             else -> state.runtimeSummary
@@ -50,19 +52,20 @@ fun InitFlowScreen(
                 .fillMaxSize()
                 .background(hostBackgroundBrush())
                 .padding(innerPadding)
+                .navigationBarsPadding()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp, vertical = 24.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
-                    text = "正在初始化 AndClaw",
+                    text = s.initAndClawTitle,
                     style = MaterialTheme.typography.headlineMedium,
                     color = Color(0xFFF8FAFC),
                     fontWeight = FontWeight.Bold,
                 )
                 Text(
-                    text = "首次启动会准备运行环境、安装 OpenClaw，并启动本地网关。",
+                    text = s.initAndClawDesc,
                     style = MaterialTheme.typography.bodyLarge,
                     color = Color(0xFFBFDBFE),
                 )
@@ -71,10 +74,10 @@ fun InitFlowScreen(
             StatusCard(
                 title =
                     when {
-                        state.gatewayRunning && state.lastError == null -> "OpenClaw 已就绪"
-                        failedStep != null -> "初始化失败"
+                        state.gatewayRunning && state.lastError == null -> s.openClawReady
+                        failedStep != null -> s.initFailed
                         activeStep != null -> activeStep.title
-                        else -> "正在初始化"
+                        else -> s.initializing
                     },
                 detail = summary!!,
                 accent = accent,
@@ -88,18 +91,18 @@ fun InitFlowScreen(
 
             if (state.lastError != null || state.busyTask != null || !state.gatewayRunning) {
                 ActionRow(
-                    primaryLabel = "查看详情",
+                    primaryLabel = s.viewDetail,
                     onPrimary = onOpenDetail,
-                    secondaryLabel = if (state.lastError != null) "重试初始化" else null,
+                    secondaryLabel = if (state.lastError != null) s.retryInit else null,
                     onSecondary = if (state.lastError != null) onRetry else null,
                 )
             }
 
             if (state.lastError != null) {
                 DetailCard(
-                    title = "错误摘要",
+                    title = s.errorSummary,
                     accent = Color(0xFFF97316),
-                    lines = listOfNotNull(state.failedStep?.let { "失败步骤: $it" }, state.lastError),
+                    lines = listOfNotNull(state.failedStep?.let { s.failedStepAt(it) }, state.lastError),
                     monospace = true,
                 )
             }

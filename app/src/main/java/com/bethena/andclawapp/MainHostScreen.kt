@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -33,18 +34,19 @@ fun MainHostScreen(
     onOpenConsole: () -> Unit,  // 打开控制台回调
     onOpenConfig: () -> Unit,   // 打开配置页回调
 ) {
+    val s = LocalAppStrings.current
     val statusTitle =
         when {
-            state.lastError != null -> "Setup stopped"
-            state.busyTask != null -> state.busyTask ?: "Working"
-            state.gatewayRunning -> "OpenClaw is ready"
-            state.openClawInstalled -> "Starting OpenClaw"
-            state.runtimeInstalled -> "Installing OpenClaw"
-            else -> "Preparing device"
+            state.lastError != null -> s.initFailed
+            state.busyTask != null -> state.busyTask ?: s.initializing
+            state.gatewayRunning -> s.openClawReady
+            state.openClawInstalled -> s.initializing
+            state.runtimeInstalled -> s.initializing
+            else -> s.initializing
         }
     val statusBody =
         when {
-            state.lastError != null && state.failedStep != null -> "Failed at ${state.failedStep}."
+            state.lastError != null && state.failedStep != null -> s.failedStepAt(state.failedStep)
             else -> state.runtimeSummary
         }
     val statusAccent =
@@ -64,10 +66,18 @@ fun MainHostScreen(
                     actionIconContentColor = Color(0xFFD6EEFF),
                 ),
                 actions = {
+                    // 语言切换按钮
+                    TextButton(onClick = { LanguageManager.toggle() }) {
+                        Text(
+                            text = s.languageToggle,
+                            color = Color(0xFFD6EEFF),
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    }
                     if (state.gatewayRunning) {
                         TextButton(onClick = onOpenConfig) {
                             Text(
-                                text = "配置",
+                                text = s.config,
                                 color = Color(0xFFD6EEFF),
                                 fontWeight = FontWeight.SemiBold,
                             )
@@ -75,7 +85,7 @@ fun MainHostScreen(
                     }
                     TextButton(onClick = onOpenConsole) {
                         Text(
-                            text = "控制台",
+                            text = s.console,
                             color = Color(0xFFD6EEFF),
                             fontWeight = FontWeight.SemiBold,
                         )
@@ -89,19 +99,20 @@ fun MainHostScreen(
                 .fillMaxSize()
                 .background(hostBackgroundBrush())
                 .padding(innerPadding)
+                .navigationBarsPadding()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp, vertical = 24.dp),
+                .padding(horizontal = 20.dp, vertical = 0.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
-                    text = "AfterClaw",
+                    text = s.appTitle,
                     style = MaterialTheme.typography.headlineMedium,
                     color = Color(0xFFF8FAFC),
                     fontWeight = FontWeight.Bold,
                 )
                 Text(
-                    text = "OpenClaw setup and startup now run automatically on your phone.",
+                    text = s.autoSetupDesc,
                     style = MaterialTheme.typography.bodyLarge,
                     color = Color(0xFFBFDBFE),
                 )
@@ -117,7 +128,7 @@ fun MainHostScreen(
 
             state.lastError?.let { error ->
                 DetailCard(
-                    title = "Error",
+                    title = s.error,
                     accent = Color(0xFFF97316),
                     lines = listOf(error),
                     monospace = true,
@@ -126,7 +137,7 @@ fun MainHostScreen(
 
             if (state.gatewayRunning) {
                 AccessCard(
-                    title = "Access",
+                    title = s.access,
                     accent = Color(0xFFF59E0B),
                     gatewayAddress = "127.0.0.1:${state.gatewayPort}",
                     gatewayToken = state.gatewayToken!!,

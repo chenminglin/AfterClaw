@@ -24,8 +24,11 @@ class MainActivity : ComponentActivity() {
         setContent {
             // 应用自定义的 Compose 主题
             Android_clawTheme {
-                // 挂载宿主根屏幕，该屏幕负责页面的路由分发（欢迎页、初始化流程、主控台、配置等）
-                HostRootScreen()
+                // 提供多语言支持包装
+                I18nProvider {
+                    // 挂载宿主根屏幕，该屏幕负责页面的路由分发（欢迎页、初始化流程、主控台、配置等）
+                    HostRootScreen()
+                }
             }
         }
     }
