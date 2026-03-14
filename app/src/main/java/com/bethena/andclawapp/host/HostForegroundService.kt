@@ -54,7 +54,7 @@ class HostForegroundService : Service() {
         }
         val channel = NotificationChannel(
             CHANNEL_ID,
-            "AndClaw Host",
+            "AfterClaw",
             NotificationManager.IMPORTANCE_LOW,
         )
         manager.createNotificationChannel(channel)

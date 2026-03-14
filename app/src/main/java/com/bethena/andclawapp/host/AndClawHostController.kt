@@ -46,8 +46,10 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
 import org.json.JSONObject
+import org.json.JSONTokener
 import org.tukaani.xz.XZInputStream
 
 private const val LOG_TAG = "AndClawHost"
@@ -78,6 +80,8 @@ private const val PREF_GATEWAY_TOKEN = "gateway_token"
 private const val DEVICE_BRIDGE_PORT = 18791
 private const val GATEWAY_PORT = 18789
 private const val MAX_LOG_LINES = 240
+private const val GATEWAY_RPC_OUTPUT_BEGIN = "__ANDCLAW_GATEWAY_RPC_BEGIN__"
+private const val GATEWAY_RPC_OUTPUT_END = "__ANDCLAW_GATEWAY_RPC_END__"
 
 data class HostUiState(
     val serviceRunning: Boolean = false,
@@ -309,6 +313,38 @@ class AndClawHostController(
             refreshState()
         }
     }
+
+    internal suspend fun callGatewayRpc(
+        method: String,
+        params: JSONObject,
+    ): JSONObject =
+        withContext(Dispatchers.IO) {
+            if (currentGatewayProcess.get()?.isAlive != true) {
+                throw IOException("OpenClaw Gateway 当前没有在运行。")
+            }
+
+            val command =
+                buildGatewayRpcShellCommand(
+                    method = method,
+                    params = params.toString(),
+                )
+            val result = runShellCommandForResult(command, timeoutSeconds = 20)
+            val payloadText = extractMarkedGatewayRpcPayload(result.output)
+
+            if (result.exitCode != 0) {
+                val detail = payloadText?.ifBlank { null } ?: result.output
+                throw IOException(cleanGatewayRpcError(detail))
+            }
+
+            val rawPayload =
+                payloadText?.takeIf { it.isNotBlank() }
+                    ?: throw IOException("Gateway RPC 没有返回可解析的内容。")
+            val parsed = JSONTokener(rawPayload).nextValue()
+            if (parsed !is JSONObject) {
+                throw IOException("Gateway RPC 返回了非对象结果：$rawPayload")
+            }
+            return@withContext parsed
+        }
 
     private suspend fun runBusyTask(
         title: String,
@@ -1789,6 +1825,35 @@ class AndClawHostController(
         )
     }
 
+    private fun buildGatewayRpcShellCommand(
+        method: String,
+        params: String,
+    ): String {
+        val cliCommand =
+            buildGuestOpenClawCommand(
+                listOf(
+                    "gateway",
+                    "call",
+                    method,
+                    "--url",
+                    "ws://127.0.0.1:$GATEWAY_PORT",
+                    "--token",
+                    gatewayToken,
+                    "--params",
+                    params,
+                    "--json",
+                )
+            )
+        return """
+            set +e
+            printf '%s\n' '$GATEWAY_RPC_OUTPUT_BEGIN'
+            $cliCommand
+            status=${'$'}?
+            printf '\n%s\n' '$GATEWAY_RPC_OUTPUT_END'
+            exit ${'$'}status
+        """.trimIndent()
+    }
+
     private fun buildShellProcess(command: String): Process {
         if (!isRuntimePrepared()) {
             throw IOException("Runtime is not ready.")
@@ -2218,9 +2283,12 @@ class AndClawHostController(
         return process.waitFor()
     }
 
-    private suspend fun runShellCommandForResult(command: String): CommandResult {
+    private suspend fun runShellCommandForResult(
+        command: String,
+        timeoutSeconds: Long = 12,
+    ): CommandResult {
         val process = buildShellProcess(command)
-        val finished = process.waitFor(12, TimeUnit.SECONDS)
+        val finished = process.waitFor(timeoutSeconds, TimeUnit.SECONDS)
         if (!finished) {
             process.destroy()
             if (process.isAlive) {
@@ -2312,6 +2380,36 @@ class AndClawHostController(
         val environment: Map<String, String>,
         val workingDir: File,
     )
+
+    private fun extractMarkedGatewayRpcPayload(output: String): String? {
+        val begin = output.indexOf(GATEWAY_RPC_OUTPUT_BEGIN)
+        val end = output.indexOf(GATEWAY_RPC_OUTPUT_END)
+        if (begin < 0 || end < 0 || end <= begin) {
+            return null
+        }
+        return output
+            .substring(begin + GATEWAY_RPC_OUTPUT_BEGIN.length, end)
+            .trim()
+    }
+
+    private fun cleanGatewayRpcError(raw: String): String {
+        val cleaned =
+            raw.lineSequence()
+                .map { it.trim() }
+                .filter { line ->
+                    line.isNotEmpty() &&
+                        line != GATEWAY_RPC_OUTPUT_BEGIN &&
+                        line != GATEWAY_RPC_OUTPUT_END
+                }
+                .joinToString("\n")
+                .trim()
+        return when {
+            cleaned.contains("config changed since last load; re-run config.get and retry", ignoreCase = true) ->
+                "配置已变化，请重新加载。"
+            cleaned.isNotBlank() -> cleaned
+            else -> "Gateway RPC 调用失败。"
+        }
+    }
 }
 
 private fun File.isSymbolicLinkCompat(): Boolean {
