@@ -73,8 +73,8 @@ fun OpenClawConfigScreen(
 
     BackHandler(onBack = ::handleBack)
 
-    LaunchedEffect(hostState.gatewayRunning) {
-        if (hostState.gatewayRunning) {
+    LaunchedEffect(hostState.gatewayReady) {
+        if (hostState.gatewayReady) {
             configState.load()
         }
     }
@@ -123,7 +123,7 @@ fun OpenClawConfigScreen(
                     }
                 },
                 actions = {
-                    if (hostState.gatewayRunning) {
+                    if (hostState.gatewayReady) {
                         TextButton(
                             onClick = { configState.load(force = true) },
                             enabled = !configState.isLoading && !configState.isSaving,
@@ -145,7 +145,7 @@ fun OpenClawConfigScreen(
         bottomBar = {
             ConfigActionBar(
                 isDirty = configState.isDirty,
-                canSave = hostState.gatewayRunning && configState.hasLoadedData,
+                canSave = hostState.gatewayReady && configState.hasLoadedData,
                 isSaving = configState.isSaving,
                 onDiscard = { configState.discardChanges() },
                 onSave = { configState.save() },
@@ -169,7 +169,7 @@ fun OpenClawConfigScreen(
                 )
             }
 
-            if (!hostState.gatewayRunning) {
+            if (!hostState.gatewayReady) {
                 item {
                     DetailCard(
                         title = s.gatewayNotRunning,
@@ -216,8 +216,8 @@ fun OpenClawConfigScreen(
                         ActionRow(
                             primaryLabel = s.reloadConfig,
                             onPrimary = { configState.load(force = true) },
-                            secondaryLabel = if (hostState.gatewayRunning) null else s.back,
-                            onSecondary = if (hostState.gatewayRunning) null else onBack,
+                            secondaryLabel = if (hostState.gatewayReady) null else s.back,
+                            onSecondary = if (hostState.gatewayReady) null else onBack,
                         )
                     }
                 }
@@ -247,7 +247,7 @@ fun OpenClawConfigScreen(
                                 label = configState.hints.workspace.label ?: "workspace",
                                 value = configState.form.workspace,
                                 onValueChange = configState::updateWorkspace,
-                                enabled = hostState.gatewayRunning && !configState.isSaving,
+                                enabled = hostState.gatewayReady && !configState.isSaving,
                                 help =
                                     configState.hints.workspace.help
                                         ?: s.workspaceHelp,
@@ -257,7 +257,7 @@ fun OpenClawConfigScreen(
                                 label = configState.hints.repoRoot.label ?: "repoRoot",
                                 value = configState.form.repoRoot,
                                 onValueChange = configState::updateRepoRoot,
-                                enabled = hostState.gatewayRunning && !configState.isSaving,
+                                enabled = hostState.gatewayReady && !configState.isSaving,
                                 help =
                                     configState.hints.repoRoot.help
                                         ?: s.repoRootHelp,
@@ -275,7 +275,7 @@ fun OpenClawConfigScreen(
                                 label = configState.hints.primaryModel.label ?: "primary model",
                                 value = configState.form.primaryModel,
                                 onValueChange = configState::updatePrimaryModel,
-                                enabled = hostState.gatewayRunning && !configState.isSaving,
+                                enabled = hostState.gatewayReady && !configState.isSaving,
                                 help =
                                     configState.hints.primaryModel.help
                                         ?: s.primaryModelHelp,
@@ -285,7 +285,7 @@ fun OpenClawConfigScreen(
                                 label = configState.hints.fallbackModels.label ?: "fallback models",
                                 value = configState.fallbackModelsText,
                                 onValueChange = configState::updateFallbacksFromText,
-                                enabled = hostState.gatewayRunning && !configState.isSaving,
+                                enabled = hostState.gatewayReady && !configState.isSaving,
                                 help =
                                     configState.hints.fallbackModels.help
                                         ?: s.fallbackModelsHelp,
@@ -314,7 +314,7 @@ fun OpenClawConfigScreen(
                             configState.form.providers.forEach { provider ->
                                 ProviderEditorCard(
                                     provider = provider,
-                                    enabled = hostState.gatewayRunning && !configState.isSaving,
+                                    enabled = hostState.gatewayReady && !configState.isSaving,
                                     onProviderIdChange = { configState.updateProviderId(provider.rowId, it) },
                                     onApiChange = { configState.updateProviderApi(provider.rowId, it) },
                                     onBaseUrlChange = { configState.updateProviderBaseUrl(provider.rowId, it) },
@@ -327,7 +327,7 @@ fun OpenClawConfigScreen(
 
                             FilledTonalButton(
                                 onClick = { configState.addProvider() },
-                                enabled = hostState.gatewayRunning && !configState.isSaving,
+                                enabled = hostState.gatewayReady && !configState.isSaving,
                             ) {
                                 Text(
                                     text = s.addProvider,

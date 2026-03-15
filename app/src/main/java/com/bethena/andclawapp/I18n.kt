@@ -119,6 +119,19 @@ interface AppStrings {
     val apiKeyExistingHelp: String
     val apiKeyDefaultHelp: String
 
+    // Onboarding
+    val onboardingTitle: String
+    val resetOnboarding: String
+    val reRunOnboarding: String
+
+    // Pairing
+    val pairingTitle: String
+    val pairingDesc: String
+    val pairingCodeLabel: String
+    val pairingChannelLabel: String
+    val approvePairing: String
+    val pairingSuccess: String
+
     // Common
     val languageToggle: String
     val saveNextEffect: String
@@ -233,6 +246,17 @@ object ChineseStrings : AppStrings {
     override val apiKeyExistingHelp = "当前已存在 apiKey；保持不改时会沿用现有值。"
     override val apiKeyDefaultHelp = "可选。只有显式输入新值时才会覆盖当前 apiKey。"
 
+    override val onboardingTitle = "新手引导"
+    override val resetOnboarding = "重新设置"
+    override val reRunOnboarding = "重新运行新手引导"
+
+    override val pairingTitle = "渠道配对"
+    override val pairingDesc = "当您在 Telegram 等聊天工具中发起 /start 后，请在此输入配对代码以批准访问。"
+    override val pairingCodeLabel = "配对代码 (例如: 2KFAPNAC)"
+    override val pairingChannelLabel = "渠道"
+    override val approvePairing = "批准配对"
+    override val pairingSuccess = "配对批准成功"
+
     override val languageToggle = "English"
     override val saveNextEffect = "保存后将在下次启动 OpenClaw 时生效。"
 
@@ -344,6 +368,17 @@ object EnglishStrings : AppStrings {
     override val baseUrlHelp = "Optional. Fill in only when using custom gateway."
     override val apiKeyExistingHelp = "Current apiKey exists; it will be kept if not modified."
     override val apiKeyDefaultHelp = "Optional. Only explicit input will override current apiKey."
+
+    override val onboardingTitle = "Onboarding"
+    override val resetOnboarding = "Reset"
+    override val reRunOnboarding = "Re-run Onboarding"
+
+    override val pairingTitle = "Channel Pairing"
+    override val pairingDesc = "Enter the code received in Telegram or other channels after running /start to approve access."
+    override val pairingCodeLabel = "Pairing Code (e.g. 2KFAPNAC)"
+    override val pairingChannelLabel = "Channel"
+    override val approvePairing = "Approve Pairing"
+    override val pairingSuccess = "Pairing approved successfully"
 
     override val languageToggle = "中文"
     override val saveNextEffect = "Changes take effect on next launch."

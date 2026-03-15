@@ -108,7 +108,7 @@ fun HostConsoleScreen(
                     detail = (state.busyTask ?: state.runtimeSummary)!!,
                     accent = when {
                         state.lastError != null -> Color(0xFFF97316)
-                        state.gatewayRunning -> Color(0xFF34D399)
+                        state.gatewayReady -> Color(0xFF34D399)
                         else -> Color(0xFF38BDF8)
                     },
                     progressLabel = state.busyProgressLabel,

@@ -86,7 +86,7 @@ private fun buildInitStepProgressDetail(state: HostUiState, s: AppStrings): (Int
  * 解析当前正处于活动状态的初始化步骤索引
  */
 private fun resolveActiveInitStepIndex(state: HostUiState): Int {
-    if (state.gatewayRunning && state.lastError == null) {
+    if (state.gatewayReady && state.lastError == null) {
         return 4
     }
     val busyTask = state.busyTask
@@ -101,7 +101,7 @@ private fun resolveActiveInitStepIndex(state: HostUiState): Int {
 
         busyTask == "Installing OpenClaw" -> 2
         busyTask == "Starting OpenClaw gateway" || busyTask == "Starting Gateway" -> 3
-        state.openClawInstalled && !state.gatewayRunning -> 3
+        state.openClawInstalled && !state.gatewayReady -> 3
         state.runtimeInstalled && !state.openClawInstalled -> 2
         state.runtimeInstalled -> 3
         state.bridgeRunning || state.serviceRunning -> 1

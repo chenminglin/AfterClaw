@@ -19,8 +19,10 @@ data class HostUiState(
     val runtimeInstalled: Boolean = false,
     /** OpenClaw 是否已成功安装 */
     val openClawInstalled: Boolean = false,
-    /** Gateway 网关服务是否正在运行 */
+    /** Gateway 网关服务是否正在运行 (进程存活) */
     val gatewayRunning: Boolean = false,
+    /** Gateway 网关服务是否已准备好接收连接 (端口已监听) */
+    val gatewayReady: Boolean = false,
     /** Bridge 桥接服务是否正在运行 */
     val bridgeRunning: Boolean = false,
     /** Bridge 桥接服务监听的端口号 */
@@ -35,4 +37,8 @@ data class HostUiState(
     val logs: List<String> = emptyList(),
     /** 最近一次发生的错误信息 */
     val lastError: String? = null,
+    /** 是否需要执行新手引导 (openclaw onboard) */
+    val needsOnboarding: Boolean = false,
+    /** 检测到的 OAuth URL (例如 OpenAI Codex) */
+    val detectedOAuthUrl: String? = null,
 )

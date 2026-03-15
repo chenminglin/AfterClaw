@@ -4,11 +4,12 @@ package com.bethena.andclawapp
  * 宿主页面的路由枚举
  */
 enum class HostRoute {
-    Welcome, // 欢迎页
-    Init,    // 初始化页
-    Detail,  // 控制台/详情页
-    Config,  // 配置页
-    Main,    // 主界面
+    Welcome,    // 欢迎页
+    Init,       // 初始化页
+    Onboarding, // 新手引导页 (openclaw onboard)
+    Detail,     // 控制台/详情页
+    Config,     // 配置页
+    Main,       // 主界面
 }
 
 /**

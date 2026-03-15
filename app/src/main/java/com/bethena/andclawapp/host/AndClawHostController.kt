@@ -71,6 +71,7 @@ class AndClawHostController(
     private val currentGatewayProcess = AtomicReference<Process?>(null)
     private var gatewayLogJob: Job? = null
     private var bridgeServer: DeviceBridgeServer? = null
+    private val isGatewayReady = AtomicReference<Boolean>(false)
 
     private val gatewayToken: String by lazy {
         prefs.getString(PREF_GATEWAY_TOKEN, null)?.takeIf { it.isNotBlank() } ?: run {
@@ -187,7 +188,7 @@ class AndClawHostController(
                 if (!probeOpenClawInstalled()) {
                     throw IOException("OpenClaw is not installed inside the bundled runtime yet.")
                 }
-                if (currentGatewayProcess.get()?.isAlive == true) {
+                if (isGatewayReady.get()) {
                     addLog("Gateway is already running on port $GATEWAY_PORT.")
                 } else {
                     val command = buildGatewayCommand()
@@ -224,8 +225,25 @@ class AndClawHostController(
     }
 
     fun startGateway() {
+        isGatewayReady.set(false)
         scope.launch {
             runBusyTask("Starting Gateway") {
+                // 1. 强制清理任何旧的网关残留进程
+                val oldProcess = currentGatewayProcess.getAndSet(null)
+                if (oldProcess != null && oldProcess.isAlive) {
+                    addLog("Cleaning up existing Gateway process before restart.")
+                    oldProcess.destroy()
+                    gatewayLogJob?.cancel()
+                    gatewayLogJob = null
+                    try {
+                        kotlinx.coroutines.withTimeout(2000) {
+                            oldProcess.waitFor()
+                        }
+                    } catch (_: Exception) {
+                        oldProcess.destroyForcibly()
+                    }
+                }
+
                 ensureBridgeServer()
                 importBundledRuntimeIfNeeded()
                 ensureUbuntuGuestRootfs()
@@ -234,11 +252,7 @@ class AndClawHostController(
                 if (!probeOpenClawInstalled()) {
                     throw IOException("OpenClaw is not installed inside the bundled runtime yet.")
                 }
-                if (currentGatewayProcess.get()?.isAlive == true) {
-                    addLog("Gateway is already running on port $GATEWAY_PORT.")
-                    refreshState()
-                    return@runBusyTask
-                }
+                
                 val command = buildGatewayCommand()
                 addLog("Launching Gateway on loopback:$GATEWAY_PORT.")
                 val process = buildShellProcess(command)
@@ -249,8 +263,21 @@ class AndClawHostController(
                     val exitCode = process.waitFor()
                     addLog("Gateway process exited with code $exitCode.")
                     currentGatewayProcess.compareAndSet(process, null)
-                    refreshState(errorMessage = if (exitCode == 0) null else "Gateway exited with code $exitCode")
+                    refreshState(errorMessage = if (exitCode == 0) null else "Gateway exited with code $exitCode. Check logs for details.")
                 }
+                
+                // 轮询等待几秒钟，看看它是否准备好
+                var attempts = 0
+                while (attempts < 15 && !isGatewayReady.get() && process.isAlive) {
+                    attempts++
+                    kotlinx.coroutines.delay(1000)
+                }
+
+                if (!process.isAlive && !isGatewayReady.get()) {
+                    val exitCode = process.exitValue()
+                    throw IOException("Gateway failed to start (exit code $exitCode). It might be a configuration or environment issue.")
+                }
+
                 refreshState()
             }
         }
@@ -275,6 +302,56 @@ class AndClawHostController(
         }
     }
 
+    fun resetOpenClawConfig() {
+        scope.launch {
+            val process = currentGatewayProcess.getAndSet(null)
+            if (process != null) {
+                addLog("Stopping Gateway for reset...")
+                process.destroy()
+                gatewayLogJob?.cancel()
+                gatewayLogJob = null
+                if (process.isAlive) {
+                    process.destroyForcibly()
+                }
+            }
+            val configFile = File(ubuntuRootfsDir, "root/.openclaw/openclaw.json")
+            if (configFile.exists()) {
+                configFile.delete()
+                addLog("OpenClaw configuration file deleted.")
+            }
+            _state.update { it.copy(detectedOAuthUrl = null) }
+            refreshState()
+        }
+    }
+
+    fun clearDetectedOAuthUrl() {
+        _state.update { it.copy(detectedOAuthUrl = null) }
+    }
+
+    /**
+     * 批准渠道配对 (例如 Telegram)
+     */
+    fun approveChannelPairing(channel: String, code: String) {
+        scope.launch {
+            runBusyTask("Approving $channel pairing") {
+                addLog("Executing pairing approve for $channel with code $code...")
+                val command = buildGuestOpenClawCommand(listOf("pairing", "approve", channel, code))
+                // 增加到 60 秒以应对 Proot 环境下的冷启动和网络验证
+                val result = runShellCommandForResult(command, timeoutSeconds = 60)
+                
+                if (result.exitCode == 0) {
+                    addLog("Pairing for $channel approved successfully!")
+                    _state.update { it.copy(lastError = null) }
+                } else {
+                    val error = if (result.exitCode == 124) "操作超时 (60s)，请检查网关是否繁忙或网络连接。" else result.output.ifBlank { "Exit code ${result.exitCode}" }
+                    addLog("Pairing failed: $error")
+                    throw IOException("配对失败: $error")
+                }
+                refreshState()
+            }
+        }
+    }
+
     internal suspend fun callGatewayRpc(
         method: String,
         params: JSONObject,
@@ -282,6 +359,9 @@ class AndClawHostController(
         withContext(Dispatchers.IO) {
             if (currentGatewayProcess.get()?.isAlive != true) {
                 throw IOException("OpenClaw Gateway 当前没有在运行。")
+            }
+            if (!isGatewayReady.get()) {
+                throw IOException("OpenClaw Gateway 正在启动中，请稍候...")
             }
 
             val rpcId = UUID.randomUUID().toString()
@@ -301,7 +381,7 @@ class AndClawHostController(
             Log.d(LOG_TAG, "RPC [$method] starting, id=$rpcId")
 
             try {
-                kotlinx.coroutines.withTimeout(15000) {
+                kotlinx.coroutines.withTimeout(60000) {
                     suspendCancellableCoroutine { continuation ->
                         val ws = okHttpClient.newWebSocket(request, object : okhttp3.WebSocketListener() {
                             var handshakeCompleted = false
@@ -399,8 +479,8 @@ class AndClawHostController(
                     }
                 }
             } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
-                Log.e(LOG_TAG, "RPC call timed out after 15s")
-                throw IOException("连接 Gateway 超时，请检查服务状态。")
+                Log.e(LOG_TAG, "RPC call timed out after 60s")
+                throw IOException("连接 Gateway 超时 (60s)，请检查网络环境或服务状态。")
             }
         }
 
@@ -557,7 +637,7 @@ class AndClawHostController(
             .put("gatewayPort", GATEWAY_PORT)
             .put("runtimeInstalled", isRuntimePrepared())
             .put("openclawInstalled", state.value.openClawInstalled)
-            .put("gatewayRunning", currentGatewayProcess.get()?.isAlive == true)
+            .put("gatewayRunning", isGatewayReady.get())
             .toString()
     }
 
@@ -581,7 +661,7 @@ class AndClawHostController(
             .put("batteryPercent", batteryPct)
             .put("bridgeUrl", bridgeUrl)
             .put("runtimeInstalled", isRuntimePrepared())
-            .put("gatewayRunning", currentGatewayProcess.get()?.isAlive == true)
+            .put("gatewayRunning", isGatewayReady.get())
             .put("openclawInstalled", state.value.openClawInstalled)
             .toString()
     }
@@ -1838,6 +1918,7 @@ class AndClawHostController(
         val guestReady = isUbuntuGuestPrepared()
         val installed = hostReady && guestReady
         val gatewayRunning = currentGatewayProcess.get()?.isAlive == true
+        val gatewayReady = isGatewayReady.get()
         val openClawInstalled =
             if (installed) {
                 try {
@@ -1849,6 +1930,10 @@ class AndClawHostController(
             } else {
                 false
             }
+
+        val configFile = File(ubuntuRootfsDir, "root/.openclaw/openclaw.json")
+        val needsOnboarding = !configFile.exists() && openClawInstalled
+
         val runtimeSummary = when {
             gatewayRunning -> "OpenClaw is running on 127.0.0.1:$GATEWAY_PORT."
             !hostReady -> "Preparing the bundled host runtime."
@@ -1862,8 +1947,10 @@ class AndClawHostController(
                 openClawInstalled = openClawInstalled,
                 bridgeRunning = bridgeServer != null,
                 gatewayRunning = gatewayRunning,
+                gatewayReady = gatewayReady,
                 runtimeSummary = runtimeSummary,
                 lastError = errorMessage ?: it.lastError,
+                needsOnboarding = needsOnboarding,
             )
         }
     }
@@ -2337,6 +2424,24 @@ class AndClawHostController(
         process.inputStream.bufferedReader().useLines { lines ->
             lines.forEach { line ->
                 maybeUpdateBusyProgressFromProcessLine(label, line)
+                if (label == "gateway" && line.contains("listening on ws://127.0.0.1:$GATEWAY_PORT")) {
+                    if (!isGatewayReady.get()) {
+                        isGatewayReady.set(true)
+                        scope.launch { refreshState() }
+                    }
+                }
+                if (label == "gateway" && line.contains("https://") && 
+                    (line.contains("Open this URL") || line.contains("OpenAI") || line.contains("auth.openai.com") || line.contains("Open:"))
+                ) {
+                    // 使用正则或更健壮的截取方式提取完整的 URL
+                    val startIndex = line.indexOf("https://")
+                    if (startIndex != -1) {
+                        val potentialUrl = line.substring(startIndex).split(Regex("\\s+")).firstOrNull()?.trim()
+                        if (potentialUrl != null && potentialUrl.startsWith("https://")) {
+                            _state.update { it.copy(detectedOAuthUrl = potentialUrl) }
+                        }
+                    }
+                }
                 addLog("[$label] $line")
             }
         }

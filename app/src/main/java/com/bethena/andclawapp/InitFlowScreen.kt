@@ -3,7 +3,9 @@ package com.bethena.andclawapp
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
@@ -35,12 +37,12 @@ fun InitFlowScreen(
     val accent =
         when {
             failedStep != null -> Color(0xFFF97316)
-            state.gatewayRunning -> Color(0xFF34D399)
+            state.gatewayReady -> Color(0xFF34D399)
             else -> Color(0xFF38BDF8)
         }
     val summary =
         when {
-            state.gatewayRunning && state.lastError == null -> s.openClawReady
+            state.gatewayReady && state.lastError == null -> s.openClawReady
             failedStep != null && state.lastError != null -> state.lastError
             activeStep != null -> activeStep.detail
             else -> state.runtimeSummary
@@ -52,7 +54,6 @@ fun InitFlowScreen(
                 .fillMaxSize()
                 .background(hostBackgroundBrush())
                 .padding(innerPadding)
-                .navigationBarsPadding()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp, vertical = 24.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -74,7 +75,7 @@ fun InitFlowScreen(
             StatusCard(
                 title =
                     when {
-                        state.gatewayRunning && state.lastError == null -> s.openClawReady
+                        state.gatewayReady && state.lastError == null -> s.openClawReady
                         failedStep != null -> s.initFailed
                         activeStep != null -> activeStep.title
                         else -> s.initializing
@@ -89,7 +90,7 @@ fun InitFlowScreen(
                 InitStepCard(step = step)
             }
 
-            if (state.lastError != null || state.busyTask != null || !state.gatewayRunning) {
+            if (state.lastError != null || state.busyTask != null || !state.gatewayReady) {
                 ActionRow(
                     primaryLabel = s.viewDetail,
                     onPrimary = onOpenDetail,
@@ -106,6 +107,8 @@ fun InitFlowScreen(
                     monospace = true,
                 )
             }
+
+            Spacer(modifier = Modifier.height(32.dp))
         }
     }
 }

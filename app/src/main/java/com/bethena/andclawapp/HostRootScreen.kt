@@ -35,10 +35,14 @@ fun HostRootScreen() {
         }
     }
 
-    LaunchedEffect(state.gatewayRunning, state.lastError) {
-        if (state.gatewayRunning && state.lastError == null) {
-            route = HostRoute.Main
-        } else if (route == HostRoute.Main) {
+    LaunchedEffect(state.gatewayReady, state.lastError, state.needsOnboarding) {
+        if (state.gatewayReady && state.lastError == null) {
+            if (state.needsOnboarding) {
+                route = HostRoute.Onboarding
+            } else {
+                route = HostRoute.Main
+            }
+        } else if (route == HostRoute.Main || route == HostRoute.Onboarding) {
             route = resolveFallbackRoute(state)
         }
     }
@@ -59,8 +63,8 @@ fun HostRootScreen() {
             HostConsoleScreen(
                 state = state,
                 onBack = {
-                    route = if (state.gatewayRunning && state.lastError == null) {
-                        HostRoute.Main
+                    route = if (state.gatewayReady && state.lastError == null) {
+                        if (state.needsOnboarding) HostRoute.Onboarding else HostRoute.Main
                     } else {
                         resolveFallbackRoute(state)
                     }
@@ -73,11 +77,28 @@ fun HostRootScreen() {
                 onBack = { route = HostRoute.Main },
             )
 
+        HostRoute.Onboarding ->
+            OnboardingScreen(
+                onFinished = {
+                    route = HostRoute.Main
+                    controller.startGateway() // Restart to pick up new config
+                },
+                onBack = {
+                    route = HostRoute.Init
+                }
+            )
+
         HostRoute.Main ->
             MainHostScreen(
                 state = state,
                 onOpenConsole = { route = HostRoute.Detail },
                 onOpenConfig = { route = HostRoute.Config },
+                onReRunOnboarding = {
+                    controller.resetOpenClawConfig()
+                },
+                onApprovePairing = { channel, code ->
+                    controller.approveChannelPairing(channel, code)
+                }
             )
 
         HostRoute.Init ->

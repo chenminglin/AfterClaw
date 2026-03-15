@@ -37,7 +37,6 @@ fun WelcomeScreen(
                     .fillMaxSize()
                     .background(hostBackgroundBrush())
                     .padding(innerPadding)
-                    .navigationBarsPadding()
                     .padding(horizontal = 20.dp, vertical = 24.dp),
                 verticalArrangement = Arrangement.spacedBy(20.dp),
             ) {
@@ -78,6 +77,8 @@ fun WelcomeScreen(
                     fontWeight = FontWeight.SemiBold,
                 )
             }
+
+            Spacer(modifier = Modifier.height(24.dp))
         }
 
         // 语言切换按钮
