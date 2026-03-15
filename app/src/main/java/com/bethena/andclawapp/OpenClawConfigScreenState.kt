@@ -36,6 +36,9 @@ class OpenClawConfigScreenState(
     var form by mutableStateOf(OpenClawCoreConfigForm())
         private set
 
+    var fallbackModelsText by mutableStateOf("")
+        private set
+
     val hints: OpenClawCoreConfigHints
         get() = snapshot?.hints ?: OpenClawCoreConfigHints()
 
@@ -67,6 +70,7 @@ class OpenClawConfigScreenState(
                 val loaded = repository.loadCoreConfig()
                 snapshot = loaded
                 form = loaded.form
+                fallbackModelsText = loaded.form.fallbackModels.joinToString("\n")
                 loadError = null
             } catch (error: Throwable) {
                 loadError = error.toUserFacingMessage()
@@ -89,6 +93,7 @@ class OpenClawConfigScreenState(
                 val updated = repository.saveCoreConfig(loadedSnapshot, form)
                 snapshot = updated
                 form = updated.form
+                fallbackModelsText = updated.form.fallbackModels.joinToString("\n")
                 saveMessage = "已保存，将在下次启动 OpenClaw 时生效。"
             } catch (error: Throwable) {
                 loadError = error.toUserFacingMessage()
@@ -104,6 +109,7 @@ class OpenClawConfigScreenState(
 
     fun discardChanges() {
         form = snapshot?.form ?: OpenClawCoreConfigForm()
+        fallbackModelsText = form.fallbackModels.joinToString("\n")
     }
 
     fun updateWorkspace(value: String) {
@@ -123,6 +129,7 @@ class OpenClawConfigScreenState(
 
     fun updateFallbacksFromText(value: String) {
         saveMessage = null
+        fallbackModelsText = value
         form =
             form.copy(
                 fallbackModels =

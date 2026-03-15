@@ -47,6 +47,10 @@ import org.json.JSONObject
 import org.json.JSONTokener
 import org.tukaani.xz.XZInputStream
 
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
+import kotlinx.coroutines.suspendCancellableCoroutine
+
 /**
  * AndClaw 宿主控制器，负责管理和协调 Proot 运行时环境、节点环境、Gateway 和桥接服务器。
  * 承担所有的环境安装、启动和停止任务。
@@ -57,6 +61,13 @@ class AndClawHostController(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val taskMutex = Mutex()
     private val prefs = appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+
+    private val okHttpClient by lazy {
+        okhttp3.OkHttpClient.Builder()
+            .connectTimeout(5, TimeUnit.SECONDS)
+            .readTimeout(30, TimeUnit.SECONDS)
+            .build()
+    }
     private val currentGatewayProcess = AtomicReference<Process?>(null)
     private var gatewayLogJob: Job? = null
     private var bridgeServer: DeviceBridgeServer? = null
@@ -273,27 +284,124 @@ class AndClawHostController(
                 throw IOException("OpenClaw Gateway 当前没有在运行。")
             }
 
-            val command =
-                buildGatewayRpcShellCommand(
-                    method = method,
-                    params = params.toString(),
-                )
-            val result = runShellCommandForResult(command, timeoutSeconds = 20)
-            val payloadText = extractMarkedGatewayRpcPayload(result.output)
+            val rpcId = UUID.randomUUID().toString()
+            val authId = "1"
+            
+            val payload = JSONObject().apply {
+                put("type", "req")
+                put("id", rpcId)
+                put("method", method)
+                put("params", params)
+            }.toString()
 
-            if (result.exitCode != 0) {
-                val detail = payloadText?.ifBlank { null } ?: result.output
-                throw IOException(cleanGatewayRpcError(detail))
-            }
+            val request = okhttp3.Request.Builder()
+                .url("ws://127.0.0.1:$GATEWAY_PORT")
+                .build()
 
-            val rawPayload =
-                payloadText?.takeIf { it.isNotBlank() }
-                    ?: throw IOException("Gateway RPC 没有返回可解析的内容。")
-            val parsed = JSONTokener(rawPayload).nextValue()
-            if (parsed !is JSONObject) {
-                throw IOException("Gateway RPC 返回了非对象结果：$rawPayload")
+            Log.d(LOG_TAG, "RPC [$method] starting, id=$rpcId")
+
+            try {
+                kotlinx.coroutines.withTimeout(15000) {
+                    suspendCancellableCoroutine { continuation ->
+                        val ws = okHttpClient.newWebSocket(request, object : okhttp3.WebSocketListener() {
+                            var handshakeCompleted = false
+
+                            override fun onOpen(webSocket: okhttp3.WebSocket, response: okhttp3.Response) {
+                                Log.d(LOG_TAG, "WebSocket opened, waiting for connect.challenge...")
+                            }
+
+                            override fun onMessage(webSocket: okhttp3.WebSocket, text: String) {
+                                try {
+                                    Log.d(LOG_TAG, "WS Message: $text")
+                                    val responseJson = JSONTokener(text).nextValue()
+                                    if (responseJson !is JSONObject) return
+
+                                    if (!handshakeCompleted) {
+                                        val type = responseJson.optString("type")
+                                        val event = responseJson.optString("event")
+                                        
+                                        // 1. 处理服务端的挑战
+                                        if (type == "event" && event == "connect.challenge") {
+                                            Log.d(LOG_TAG, "Received challenge, sending connect request")
+                                            val connectPayload = JSONObject().apply {
+                                                put("type", "req")
+                                                put("id", authId)
+                                                put("method", "connect")
+                                                put("params", JSONObject().apply {
+                                                    put("minProtocol", 3)
+                                                    put("maxProtocol", 3)
+                                                    put("client", JSONObject().apply {
+                                                        put("id", "cli")
+                                                        put("version", "2026.3.8")
+                                                        put("platform", "linux")
+                                                        put("mode", "cli")
+                                                    })
+                                                    put("caps", org.json.JSONArray())
+                                                    put("role", "operator")
+                                                    put("scopes", org.json.JSONArray().put("operator.admin"))
+                                                    put("auth", JSONObject().apply {
+                                                        put("token", gatewayToken)
+                                                    })
+                                                })
+                                            }.toString()
+                                            Log.d(LOG_TAG, "Sending connect: $connectPayload")
+                                            webSocket.send(connectPayload)
+                                        } 
+                                        // 2. 处理验证结果
+                                        else if (type == "res" && responseJson.optString("id") == authId) {
+                                            val ok = responseJson.optBoolean("ok", false)
+                                            if (ok) {
+                                                Log.d(LOG_TAG, "Handshake OK, sending actual RPC: $payload")
+                                                handshakeCompleted = true
+                                                webSocket.send(payload)
+                                            } else {
+                                                val errorObj = responseJson.optJSONObject("error")
+                                                val errorMessage = errorObj?.optString("message") ?: "Gateway Auth failed"
+                                                Log.e(LOG_TAG, "Auth error: $errorMessage")
+                                                if (continuation.isActive) continuation.resumeWithException(IOException(errorMessage))
+                                                webSocket.close(1000, null)
+                                            }
+                                        }
+                                        return
+                                    }
+
+                                    // 3. 处理最终的 RPC 响应
+                                    if (responseJson.optString("type") == "res" && responseJson.optString("id") == rpcId) {
+                                        val ok = responseJson.optBoolean("ok", false)
+                                        Log.d(LOG_TAG, "Received RPC response, ok=$ok")
+                                        if (ok) {
+                                            if (continuation.isActive) continuation.resume(responseJson.optJSONObject("payload") ?: JSONObject())
+                                        } else {
+                                            val errorObj = responseJson.optJSONObject("error")
+                                            val errorMessage = errorObj?.optString("message")?.takeIf { it.isNotBlank() } ?: "RPC 调用返回错误"
+                                            if (continuation.isActive) continuation.resumeWithException(IOException(cleanGatewayRpcError(errorMessage)))
+                                        }
+                                        webSocket.close(1000, null)
+                                    }
+                                } catch (e: Exception) {
+                                    Log.e(LOG_TAG, "Error parsing WS message", e)
+                                    if (continuation.isActive) continuation.resumeWithException(e)
+                                    webSocket.close(1000, null)
+                                }
+                            }
+
+                            override fun onFailure(webSocket: okhttp3.WebSocket, t: Throwable, response: okhttp3.Response?) {
+                                Log.e(LOG_TAG, "WebSocket failure", t)
+                                if (continuation.isActive) {
+                                    continuation.resumeWithException(IOException("Gateway RPC 连接失败: ${t.message}", t))
+                                }
+                            }
+                        })
+
+                        continuation.invokeOnCancellation {
+                            ws.cancel()
+                        }
+                    }
+                }
+            } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
+                Log.e(LOG_TAG, "RPC call timed out after 15s")
+                throw IOException("连接 Gateway 超时，请检查服务状态。")
             }
-            return@withContext parsed
         }
 
     private suspend fun runBusyTask(
@@ -1773,35 +1881,6 @@ class AndClawHostController(
                 "token",
             )
         )
-    }
-
-    private fun buildGatewayRpcShellCommand(
-        method: String,
-        params: String,
-    ): String {
-        val cliCommand =
-            buildGuestOpenClawCommand(
-                listOf(
-                    "gateway",
-                    "call",
-                    method,
-                    "--url",
-                    "ws://127.0.0.1:$GATEWAY_PORT",
-                    "--token",
-                    gatewayToken,
-                    "--params",
-                    params,
-                    "--json",
-                )
-            )
-        return """
-            set +e
-            printf '%s\n' '$GATEWAY_RPC_OUTPUT_BEGIN'
-            $cliCommand
-            status=${'$'}?
-            printf '\n%s\n' '$GATEWAY_RPC_OUTPUT_END'
-            exit ${'$'}status
-        """.trimIndent()
     }
 
     private fun buildShellProcess(command: String): Process {

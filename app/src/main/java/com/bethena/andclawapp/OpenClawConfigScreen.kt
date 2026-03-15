@@ -63,10 +63,6 @@ fun OpenClawConfigScreen(
     val configState = rememberOpenClawConfigScreenState(context.openClawConfigRepository())
     var showDiscardDialog by rememberSaveable { mutableStateOf(false) }
 
-    val fallbackModelsText = remember(configState.form.fallbackModels) {
-        configState.form.fallbackModels.joinToString("\n")
-    }
-
     fun handleBack() {
         if (configState.isDirty && !configState.isSaving) {
             showDiscardDialog = true
@@ -287,7 +283,7 @@ fun OpenClawConfigScreen(
                             Spacer(modifier = Modifier.height(12.dp))
                             ConfigTextField(
                                 label = configState.hints.fallbackModels.label ?: "fallback models",
-                                value = fallbackModelsText,
+                                value = configState.fallbackModelsText,
                                 onValueChange = configState::updateFallbacksFromText,
                                 enabled = hostState.gatewayRunning && !configState.isSaving,
                                 help =

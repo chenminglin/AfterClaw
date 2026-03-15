@@ -17,5 +17,5 @@ local.properties
 /.gradle-home/
 /.idea/
 /.kotlin/
-
+*.logcat
 builderror.txt
